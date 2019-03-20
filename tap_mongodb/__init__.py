@@ -22,7 +22,7 @@ REQUIRED_CONFIG_KEYS = [
 
 
 IGNORE_DBS = ['admin', 'system', 'local']
-IGNORE_COLLECTIONS = ['system.indexes']
+IGNORE_COLLECTIONS = ['system.indexes', 'system.users']
 
 
 def produce_collection_schema(collection):
