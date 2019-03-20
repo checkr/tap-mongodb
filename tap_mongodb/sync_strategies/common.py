@@ -49,7 +49,7 @@ def row_to_singer_record(stream, row, version, time_extracted):
     row_to_persist = {k:transform_value(v) for k,v in row.items()}
 
     return singer.RecordMessage(
-        stream=stream['stream'],
+        stream=stream['tap_stream_id'],
         record=row_to_persist,
         version=version,
         time_extracted=time_extracted)

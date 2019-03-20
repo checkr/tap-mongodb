@@ -3,9 +3,11 @@ from bson import objectid
 import copy
 import pymongo
 import singer
+from bson import InvalidBSON
 from singer import metadata, metrics, utils
 import tap_mongodb.sync_strategies.common as common
 import tap_mongodb.sync_strategies.oplog as oplog
+import sys
 
 LOGGER = singer.get_logger()
 
@@ -14,7 +16,7 @@ def generate_bookmark_keys(stream):
     stream_metadata = md_map.get((), {})
     replication_method = stream_metadata.get('replication-method')
 
-    base_bookmark_keys = {'last_id_fetched', 'max_id_value', 'version', 'initial_full_table_complete'}
+    base_bookmark_keys = {'last_id_fetched', 'max_id_value', 'version', 'initial_full_table_complete', 'initial_sync', 'replication_method'}
 
     if replication_method == 'FULL_TABLE':
         bookmark_keys = base_bookmark_keys
@@ -29,7 +31,7 @@ def get_max_id_value(collection):
     return str(row['_id'])
 
 
-def sync_table(client, stream, state, stream_version, columns):
+def sync_table(client, stream, state, stream_version, blacklist):
     common.whitelist_bookmark_keys(generate_bookmark_keys(stream), stream['tap_stream_id'], state)
 
     mdata = metadata.to_map(stream['metadata'])
@@ -67,11 +69,10 @@ def sync_table(client, stream, state, stream_version, columns):
                                   'max_id_value',
                                   max_id_value)
 
-
     find_filter = {'$lte': objectid.ObjectId(max_id_value)}
 
     if last_id_fetched:
-        find_filter['$gt': objectid.ObjectId(last_id_fetched)]
+        find_filter['$gt'] = objectid.ObjectId(last_id_fetched)
 
     LOGGER.info("Starting full table replication for table {}.{}".format(database_name, stream['stream']))
 
@@ -82,28 +83,34 @@ def sync_table(client, stream, state, stream_version, columns):
 
             time_extracted = utils.now()
 
-            for row in cursor:
-                rows_saved += 1
+            while cursor.alive:
+                try:
+                    row = next(cursor)
+                    rows_saved += 1
 
-                whitelisted_row = {k:v for k,v in row.items() if k in columns}
-                record_message = common.row_to_singer_record(stream,
-                                                             whitelisted_row,
-                                                             stream_version,
-                                                             time_extracted)
+                    whitelisted_row = {k:v for k,v in row.items() if k not in blacklist}
+                    record_message = common.row_to_singer_record(stream,
+                                                                whitelisted_row,
+                                                                stream_version,
+                                                                time_extracted)
 
-                singer.write_message(record_message)
+                    singer.write_message(record_message)
 
-                state = singer.write_bookmark(state,
-                                              stream['tap_stream_id'],
-                                              'last_id_fetched',
-                                              str(row['_id']))
+                    state = singer.write_bookmark(state,
+                                                stream['tap_stream_id'],
+                                                'last_id_fetched',
+                                                str(row['_id']))
 
 
-                if rows_saved % 1000 == 0:
-                    singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
-
+                    if rows_saved % 1000 == 0:
+                        singer.write_state(state)
+                except InvalidBSON as e:
+                    LOGGER.info(e)
+                    continue
+            
     # clear max pk value and last pk fetched upon successful sync
     singer.clear_bookmark(state, stream['tap_stream_id'], 'max_id_value')
     singer.clear_bookmark(state, stream['tap_stream_id'], 'last_id_fetched')
 
     singer.write_message(activate_version_message)
+    singer.write_state(state)

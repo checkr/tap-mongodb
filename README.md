@@ -52,7 +52,7 @@ Each entry under the Catalog's "stream" key will need the following metadata:
         "metadata": {
           "selected": true,
           "replication-method": "FULL_TABLE",
-          "custom-select-clause": "name,age,birthday,address,city,state,zip"
+          "blacklisted-fields": "name,age,birthday,address,city,state,zip"
         }
       }]
     }
