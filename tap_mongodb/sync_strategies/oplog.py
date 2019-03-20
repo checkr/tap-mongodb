@@ -43,7 +43,8 @@ def generate_streams_map(streams):
     return streams_map
 
 def generate_tap_stream_id_for_row(row):
-    row_db, row_table = row['ns'].split('.')
+    
+    row_db, row_table = row['ns'].split('.', 1)
 
     return "{}-{}".format(row_db, row_table)
 
