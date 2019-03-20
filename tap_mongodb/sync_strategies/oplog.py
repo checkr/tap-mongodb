@@ -90,7 +90,7 @@ def sync_oplog_stream(client, streams, state):
                                         oplog_replay=True) as cursor:
             for row in cursor:
                 if row['op'] == 'n':
-                    LOGGER.info('Skipping noop op')
+                    LOGGER.debug('Skipping noop op')
                 elif not streams_map.get(generate_tap_stream_id_for_row(row)):
                     ops_skipped = ops_skipped + 1
 

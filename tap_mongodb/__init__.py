@@ -178,7 +178,7 @@ def get_oplog_streams(client, streams, state):
         if replication_method == 'LOG_BASED' and not oplog_stream_requires_historical(stream, state):
             oplog_streams.append(stream)
 
-        return oplog_streams
+    return oplog_streams
 
 
 def sync_oplog_streams(client, streams, state):
