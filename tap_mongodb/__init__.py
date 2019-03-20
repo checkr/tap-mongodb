@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import copy
 import json
-from pymongo import MongoClient
+import pymongo
 
 import singer
 from singer import metadata, metrics, utils
@@ -28,10 +28,17 @@ IGNORE_COLLECTIONS = ['system.indexes', 'system.users']
 def produce_collection_schema(collection):
     collection_name = collection.name
     collection_db_name = collection.database.name
+    collection_keys = ""
 
     mdata = {}
     mdata = metadata.write(mdata, (), 'database-name', collection_db_name)
     mdata = metadata.write(mdata, (), 'row-count', collection.count())
+    mdata = metadata.write(mdata, (), 'selected', False)
+    mdata = metadata.write(mdata, (), 'replication-method', 'FULL_TABLE')
+
+    doc = collection.find_one({}, sort=[('_id', pymongo.DESCENDING)])
+    if doc: collection_keys = ",".join(doc.keys())
+    mdata = metadata.write(mdata, (), 'custom-select-clause', collection_keys)
 
     return {
         'table_name': collection_name,
@@ -296,7 +303,7 @@ def main_impl():
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
 
-    client = MongoClient(config['uri'])
+    client = pymongo.MongoClient(config['uri'])
 
     if args.discover:
          do_discover(client)
