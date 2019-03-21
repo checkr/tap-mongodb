@@ -89,6 +89,8 @@ def sync_oplog_stream(client, streams, state):
         with client.local.oplog.rs.find({'ts': {'$gt': oplog_ts}},
                                         oplog_replay=True) as cursor:
             for row in cursor:
+                rows_saved += 1
+
                 if row['op'] == 'n':
                     LOGGER.debug('Skipping noop op')
                 elif not streams_map.get(generate_tap_stream_id_for_row(row)):
@@ -132,4 +134,9 @@ def sync_oplog_stream(client, streams, state):
                 state = update_bookmarks(state,
                                          streams_map,
                                          row['ts'])
+                
+                if rows_saved % 1000 == 0:
+                    singer.write_state(state)
+
+            # Send state message at the end
             singer.write_state(state)

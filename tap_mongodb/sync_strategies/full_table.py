@@ -99,7 +99,7 @@ def sync_table(client, stream, state, stream_version, columns):
 
 
                 if rows_saved % 1000 == 0:
-                    singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
+                    singer.write_state(state)
 
     # clear max pk value and last pk fetched upon successful sync
     singer.clear_bookmark(state, stream['tap_stream_id'], 'max_id_value')
