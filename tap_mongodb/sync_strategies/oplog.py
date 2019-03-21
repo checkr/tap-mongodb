@@ -132,3 +132,4 @@ def sync_oplog_stream(client, streams, state):
                 state = update_bookmarks(state,
                                          streams_map,
                                          row['ts'])
+            singer.write_state(state)

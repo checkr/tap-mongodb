@@ -67,7 +67,6 @@ def sync_table(client, stream, state, stream_version, columns):
                                   'max_id_value',
                                   max_id_value)
 
-
     find_filter = {'$lte': objectid.ObjectId(max_id_value)}
 
     if last_id_fetched:
@@ -107,3 +106,4 @@ def sync_table(client, stream, state, stream_version, columns):
     singer.clear_bookmark(state, stream['tap_stream_id'], 'last_id_fetched')
 
     singer.write_message(activate_version_message)
+    singer.write_state(state)
