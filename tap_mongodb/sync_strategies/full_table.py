@@ -3,6 +3,7 @@ from bson import objectid
 import copy
 import pymongo
 import singer
+from bson import InvalidBSON
 from singer import metadata, metrics, utils
 import tap_mongodb.sync_strategies.common as common
 import tap_mongodb.sync_strategies.oplog as oplog
@@ -81,26 +82,31 @@ def sync_table(client, stream, state, stream_version, columns):
 
             time_extracted = utils.now()
 
-            for row in cursor:
-                rows_saved += 1
+            while cursor.alive:
+                try:
+                    row = next(cursor)
+                    rows_saved += 1
 
-                whitelisted_row = {k:v for k,v in row.items() if k in columns}
-                record_message = common.row_to_singer_record(stream,
-                                                             whitelisted_row,
-                                                             stream_version,
-                                                             time_extracted)
+                    whitelisted_row = {k:v for k,v in row.items() if k in columns}
+                    record_message = common.row_to_singer_record(stream,
+                                                                whitelisted_row,
+                                                                stream_version,
+                                                                time_extracted)
 
-                singer.write_message(record_message)
+                    singer.write_message(record_message)
 
-                state = singer.write_bookmark(state,
-                                              stream['tap_stream_id'],
-                                              'last_id_fetched',
-                                              str(row['_id']))
+                    state = singer.write_bookmark(state,
+                                                stream['tap_stream_id'],
+                                                'last_id_fetched',
+                                                str(row['_id']))
 
 
-                if rows_saved % 1000 == 0:
-                    singer.write_state(state)
-
+                    if rows_saved % 1000 == 0:
+                        singer.write_state(state)
+                except InvalidBSON as e:
+                    LOGGER.info(e)
+                    continue
+            
     # clear max pk value and last pk fetched upon successful sync
     singer.clear_bookmark(state, stream['tap_stream_id'], 'max_id_value')
     singer.clear_bookmark(state, stream['tap_stream_id'], 'last_id_fetched')
