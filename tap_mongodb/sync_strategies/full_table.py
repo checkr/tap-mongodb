@@ -71,7 +71,7 @@ def sync_table(client, stream, state, stream_version, columns):
     find_filter = {'$lte': objectid.ObjectId(max_id_value)}
 
     if last_id_fetched:
-        find_filter['$gt': objectid.ObjectId(last_id_fetched)]
+        find_filter['$gt'] = objectid.ObjectId(last_id_fetched)
 
     LOGGER.info("Starting full table replication for table {}.{}".format(database_name, stream['stream']))
 
