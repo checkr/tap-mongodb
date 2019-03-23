@@ -5,7 +5,6 @@ import pymongo
 import singer
 from bson import InvalidBSON
 from singer import metadata, metrics, utils
-
 import tap_mongodb.sync_strategies.common as common
 
 LOGGER = singer.get_logger()
@@ -106,7 +105,7 @@ def sync_oplog_stream(client, streams, state):
                     else:
                         rows_saved += 1
                         row_op = row['op']
-                        if row_op in ['i', 'u']:
+                        if row_op in ['i']:
                             tap_stream_id = generate_tap_stream_id_for_row(row)
                             stream_map_entry = streams_map[tap_stream_id]
                             whitelisted_row = {k:v for k,v in row['o'].items() if k in stream_map_entry['columns']}
@@ -116,7 +115,16 @@ def sync_oplog_stream(client, streams, state):
                                                                         time_extracted)
 
                             singer.write_message(record_message)
+                        if row_op in ['u']:
+                            tap_stream_id = generate_tap_stream_id_for_row(row)
+                            stream_map_entry = streams_map[tap_stream_id]
+                            whitelisted_row = {k:v for k,v in dict(row['o2'], **row['o']['$set']).items() if k in stream_map_entry['columns']}
+                            record_message = common.row_to_singer_record(stream_map_entry['stream'],
+                                                                        whitelisted_row,
+                                                                        common.get_stream_version(tap_stream_id, state),
+                                                                        time_extracted)
 
+                            singer.write_message(record_message)
                         elif row_op == 'd':
                             rows_saved += 1
                             tap_stream_id = generate_tap_stream_id_for_row(row)
