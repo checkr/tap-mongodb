@@ -6,6 +6,7 @@ import singer
 from bson import InvalidBSON
 from singer import metadata, metrics, utils
 import tap_mongodb.sync_strategies.common as common
+import sys
 
 LOGGER = singer.get_logger()
 
@@ -64,10 +65,11 @@ def update_bookmarks(state, streams_map, ts):
 
 
 def sync_oplog_stream(client, streams, state):
+
     streams_map = generate_streams_map(streams)
 
-    for tap_stream_id in streams_map.keys():
-        common.whitelist_bookmark_keys(BOOKMARK_KEYS, tap_stream_id, state)
+    #for tap_stream_id in streams_map.keys():
+    #    common.whitelist_bookmark_keys(BOOKMARK_KEYS, tap_stream_id, state)
 
     for tap_stream_id, bookmark in state.get('bookmarks', {}).items():
         columns = streams_map.get(tap_stream_id)

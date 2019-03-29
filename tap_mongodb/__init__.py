@@ -130,12 +130,14 @@ def get_non_oplog_streams(client, streams, state):
     for stream in selected_streams:
         stream_metadata = metadata.to_map(stream['metadata'])
         replication_method = stream_metadata.get((), {}).get('replication-method')
+        state = singer.write_bookmark(state, stream['tap_stream_id'], 'replication_method', replication_method)
+
         stream_state = state.get('bookmarks', {}).get(stream['tap_stream_id'])
 
         if not stream_state:
             if replication_method == 'LOG_BASED':
                 LOGGER.info("LOG_BASED stream %s requires full historical sync", stream['tap_stream_id'])
-
+            
             streams_without_state.append(stream)
         elif stream_state and replication_method == 'LOG_BASED' and oplog_stream_requires_historical(stream, state):
             LOGGER.info("LOG_BASED stream %s will resume its historical sync", stream['tap_stream_id'])
@@ -163,7 +165,7 @@ def get_non_oplog_streams(client, streams, state):
         # prioritize streams that have not been processed
         streams_to_sync = ordered_streams
 
-    return streams_to_sync
+    return (streams_to_sync, state)
 
 
 def get_oplog_streams(client, streams, state):
@@ -173,12 +175,12 @@ def get_oplog_streams(client, streams, state):
     for stream in selected_streams:
         stream_metadata = metadata.to_map(stream['metadata']).get((), {})
         replication_method = stream_metadata.get('replication-method')
-        stream_state = state.get('bookmarks', {}).get(stream['tap_stream_id'])
+        state = singer.write_bookmark(state, stream['tap_stream_id'], 'replication_method', replication_method)
 
         if replication_method == 'LOG_BASED' and not oplog_stream_requires_historical(stream, state):
             oplog_streams.append(stream)
 
-    return oplog_streams
+    return (oplog_streams, state)
 
 
 def sync_oplog_streams(client, streams, state):
@@ -192,7 +194,7 @@ def sync_oplog_streams(client, streams, state):
 
 def write_schema_message(stream):
     singer.write_message(singer.SchemaMessage(
-        stream=stream['stream'],
+        stream=stream['tap_stream_id'],
         schema=stream['schema'],
         key_properties=['_id']))
 
@@ -209,10 +211,6 @@ def do_sync_historical_oplog(client, stream, state, columns):
     max_id_value = singer.get_bookmark(state,
                                        stream['tap_stream_id'],
                                        'max_id_value')
-
-    last_id_fetched = singer.get_bookmark(state,
-                                          stream['tap_stream_id'],
-                                          'last_id_fetched')
 
     write_schema_message(stream)
 
@@ -277,24 +275,23 @@ def sync_non_oplog_streams(client, streams, state):
                 write_schema_message(stream)
                 stream_version = common.get_stream_version(stream['tap_stream_id'], state)
                 full_table.sync_table(client, stream, state, stream_version, columns)
-
-                state = singer.write_bookmark(state,
-                                              stream['tap_stream_id'],
-                                              'initial_full_table_complete',
-                                              True)
             else:
                 raise Exception(f"only LOG_BASED and FULL TABLE replication methods are supported (you passed {replication_method})")
 
-    state = singer.set_currently_syncing(state, None)
+            state = singer.write_bookmark(state,
+                                          stream['tap_stream_id'],
+                                          'initial_full_table_complete',
+                                          True)
 
+    state = singer.set_currently_syncing(state, None)
     singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
 
 def do_sync(client, properties, state):
     all_streams = properties['streams']
-    non_oplog_streams = get_non_oplog_streams(client, all_streams, state)
-    oplog_streams = get_oplog_streams(client, all_streams, state)
-
+    non_oplog_streams, state = get_non_oplog_streams(client, all_streams, state)
+    oplog_streams, state = get_oplog_streams(client, all_streams, state)
+    
     sync_non_oplog_streams(client, non_oplog_streams, state)
     sync_oplog_streams(client, oplog_streams, state)
 

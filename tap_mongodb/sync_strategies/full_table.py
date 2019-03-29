@@ -7,6 +7,7 @@ from bson import InvalidBSON
 from singer import metadata, metrics, utils
 import tap_mongodb.sync_strategies.common as common
 import tap_mongodb.sync_strategies.oplog as oplog
+import sys
 
 LOGGER = singer.get_logger()
 
@@ -15,7 +16,7 @@ def generate_bookmark_keys(stream):
     stream_metadata = md_map.get((), {})
     replication_method = stream_metadata.get('replication-method')
 
-    base_bookmark_keys = {'last_id_fetched', 'max_id_value', 'version', 'initial_full_table_complete'}
+    base_bookmark_keys = {'last_id_fetched', 'max_id_value', 'version', 'initial_full_table_complete', 'initial_sync', 'replication_method'}
 
     if replication_method == 'FULL_TABLE':
         bookmark_keys = base_bookmark_keys
