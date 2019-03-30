@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import copy
 import json
-import pymongo
+from pymongo import MongoClient, ReadPreference
 
 import singer
 from singer import metadata, metrics, utils
@@ -300,7 +300,8 @@ def main_impl():
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
 
-    client = pymongo.MongoClient(config['uri'])
+    client = MongoClient(config['uri'])
+    client.ReadPreference = ReadPreference.SECONDARY
 
     if args.discover:
          do_discover(client)
