@@ -31,7 +31,7 @@ def get_max_id_value(collection):
     return str(row['_id'])
 
 
-def sync_table(client, stream, state, stream_version, columns):
+def sync_table(client, stream, state, stream_version, blacklist):
     common.whitelist_bookmark_keys(generate_bookmark_keys(stream), stream['tap_stream_id'], state)
 
     mdata = metadata.to_map(stream['metadata'])
@@ -88,7 +88,7 @@ def sync_table(client, stream, state, stream_version, columns):
                     row = next(cursor)
                     rows_saved += 1
 
-                    whitelisted_row = {k:v for k,v in row.items() if k in columns}
+                    whitelisted_row = {k:v for k,v in row.items() if k not in blacklist}
                     record_message = common.row_to_singer_record(stream,
                                                                 whitelisted_row,
                                                                 stream_version,

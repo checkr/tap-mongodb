@@ -28,17 +28,13 @@ IGNORE_COLLECTIONS = ['system.indexes', 'system.users']
 def produce_collection_schema(collection):
     collection_name = collection.name
     collection_db_name = collection.database.name
-    collection_keys = ""
 
     mdata = {}
     mdata = metadata.write(mdata, (), 'database-name', collection_db_name)
     mdata = metadata.write(mdata, (), 'row-count', collection.count())
     mdata = metadata.write(mdata, (), 'selected', False)
-    mdata = metadata.write(mdata, (), 'replication-method', 'FULL_TABLE')
-
-    doc = collection.find_one({}, sort=[('_id', pymongo.DESCENDING)])
-    if doc: collection_keys = ",".join(doc.keys())
-    mdata = metadata.write(mdata, (), 'custom-select-clause', collection_keys)
+    mdata = metadata.write(mdata, (), 'replication-method', 'LOG_BASED')
+    mdata = metadata.write(mdata, (), 'blacklisted-fields', '')
 
     return {
         'table_name': collection_name,
@@ -199,7 +195,7 @@ def write_schema_message(stream):
         key_properties=['_id']))
 
 
-def do_sync_historical_oplog(client, stream, state, columns):
+def do_sync_historical_oplog(client, stream, state, blacklist):
     oplog_ts_time = singer.get_bookmark(state,
                                         stream['tap_stream_id'],
                                         'oplog_ts_time')
@@ -218,7 +214,7 @@ def do_sync_historical_oplog(client, stream, state, columns):
 
     if oplog_ts_time and oplog_ts_inc and max_id_value:
         LOGGER.info("Resuming initial full table sync for LOG_BASED stream %s", stream['tap_stream_id'])
-        full_table.sync_table(client, stream, state, stream_version, columns)
+        full_table.sync_table(client, stream, state, stream_version, blacklist)
 
     else:
         LOGGER.info("Performing initial full table sync for LOG_BASED stream %s", stream['tap_stream_id'])
@@ -241,21 +237,14 @@ def do_sync_historical_oplog(client, stream, state, columns):
                                       'oplog_ts_inc',
                                       current_oplog_ts.inc)
 
-        full_table.sync_table(client, stream, state, stream_version, columns)
+        full_table.sync_table(client, stream, state, stream_version, blacklist)
 
 def sync_non_oplog_streams(client, streams, state):
     for stream in streams:
         md_map = metadata.to_map(stream['metadata'])
         stream_metadata = md_map.get(())
-        select_clause = stream_metadata.get('custom-select-clause')
-
-        if not select_clause:
-            LOGGER.warning('There are no columns selected for stream %s, skipping it.', stream['tap_stream_stream'])
-            continue
-
-        columns = [c.strip(' ') for c in select_clause.split(',')]
-        columns.append('_id')
-
+        blacklisted_fields = stream_metadata.get('blacklisted-fields')
+        blacklist = [c.strip(' ') for c in blacklisted_fields.split(',')]
         state = singer.set_currently_syncing(state, stream['tap_stream_id'])
 
         # Emit a state message to indicate that we've started this stream
@@ -270,11 +259,11 @@ def sync_non_oplog_streams(client, streams, state):
             timer.tags['table'] = stream['table_name']
 
             if replication_method == 'LOG_BASED':
-                do_sync_historical_oplog(client, stream, state, columns)
+                do_sync_historical_oplog(client, stream, state, blacklist)
             elif replication_method == 'FULL_TABLE':
                 write_schema_message(stream)
                 stream_version = common.get_stream_version(stream['tap_stream_id'], state)
-                full_table.sync_table(client, stream, state, stream_version, columns)
+                full_table.sync_table(client, stream, state, stream_version, blacklist)
             else:
                 raise Exception(f"only LOG_BASED and FULL TABLE replication methods are supported (you passed {replication_method})")
 
