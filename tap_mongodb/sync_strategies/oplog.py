@@ -38,7 +38,7 @@ def generate_streams_map(streams):
     return streams_map
 
 def generate_tap_stream_id_for_row(row):
-    
+
     row_db, row_table = row['ns'].split('.', 1)
 
     return "{}-{}".format(row_db, row_table)
@@ -79,7 +79,7 @@ def sync_oplog_stream(client, streams, state):
 
         with client.local.oplog.rs.find({'ts': {'$gt': oplog_ts}},
                                         oplog_replay=True) as cursor:
-            
+
             while cursor.alive:
                 try:
                     row = next(cursor)
@@ -110,12 +110,12 @@ def sync_oplog_stream(client, streams, state):
                             tap_stream_id = generate_tap_stream_id_for_row(row)
                             stream_map_entry = streams_map[tap_stream_id]
 
-                            if '$set' in row['o'].keys():
-                                obj = dict(row['o2'], **row['o']['$set'])
-                            else:
-                                obj = row['o'] 
+                            # if '$set' in row['o'].keys():
+                            #     obj = dict(row['o2'], **row['o']['$set'])
+                            # else:
+                            #     obj = row['o']
 
-                            whitelisted_row = {k:v for k,v in obj.items() if k not in stream_map_entry['blacklist']}
+                            whitelisted_row = {k:v for k,v in row['o'].items() if k not in stream_map_entry['blacklist']}
                             record_message = common.row_to_singer_record(stream_map_entry['stream'],
                                                                         whitelisted_row,
                                                                         common.get_stream_version(tap_stream_id, state),
@@ -123,7 +123,6 @@ def sync_oplog_stream(client, streams, state):
 
                             singer.write_message(record_message)
                         elif row_op == 'd':
-                            rows_saved += 1
                             tap_stream_id = generate_tap_stream_id_for_row(row)
                             stream_map_entry = streams_map[tap_stream_id]
 
